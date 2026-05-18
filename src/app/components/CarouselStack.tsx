@@ -1,21 +1,20 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { items } from "./items";
 import { AnimationSettings } from "./SettingsPanel";
 
-// Image variants aka first card
+const STACK_POSITIONS = 4;
+
 const createCardVariants = (settings: AnimationSettings) => ({
   visible: (i: number) => ({
     opacity: 1,
-    zIndex: [4, 3, 2, 1][i],
-    scale: [1, 0.9, 0.85, 0.8][i], // Scale depending on position
-    y: [0, -12, 0, 12][i], // Vertical position depending on index (keep scale in mind)
-    rotate: [0, 2, 4, 7][i],
-    x: [0, 32, 48, 62][i],
+    zIndex: [4, 3, 2, 1][i] ?? 0,
+    scale: [1, 0.9, 0.85, 0.8][i] ?? 0.8,
+    y: [0, -12, 0, 12][i] ?? 12,
+    rotate: [0, 2, 4, 7][i] ?? 7,
+    x: [0, 32, 48, 62][i] ?? 62,
     perspective: 400,
     transition: {
-      // opacity: { duration: 0.3 },
-      zIndex: { delay: settings.zIndexDelay }, // Delay zIndex to avoid visual stacking issues during transition
+      zIndex: { delay: settings.zIndexDelay },
       scale: { type: "spring", duration: settings.springDuration, bounce: settings.springBounce },
       y: { type: "spring", duration: settings.springDuration, bounce: settings.springBounce },
       x: { type: "spring", duration: settings.xSpringDuration, bounce: settings.xSpringBounce },
@@ -24,74 +23,84 @@ const createCardVariants = (settings: AnimationSettings) => ({
   exit: { opacity: 0, scale: 0.5, y: 50 },
 });
 
-/**
- * Experimenting with distilling swipe offset and velocity into a single variable, so the
- * less distance a user has swiped, the more velocity they need to register as a swipe.
- * Should accomodate longer swipes and short flicks without having binary checks on
- * just distance thresholds and velocity > 0.
- */
-const swipePower = (offset: number, velocity: number) => {
-  return Math.abs(offset) * velocity;
-};
+const swipePower = (offset: number, velocity: number) => Math.abs(offset) * velocity;
+
+interface CardStyleInput {
+  id: string;
+  image: string;
+  imageScale: number;
+  background: string;
+}
 
 interface CarouselStackProps {
   settings: AnimationSettings;
-  images?: string[];
+  cardStyles: CardStyleInput[];
 }
 
-export const CarouselStack: React.FC<CarouselStackProps> = ({ settings, images }) => {
-  const [[page, direction], setPage] = useState([0, 0]);
-  const [indices, setIndices] = useState([0, 1, 2, 3]);
-  const [dragElastic, setDragElastic] = useState(0.7); // Default to desktop
+export const CarouselStack: React.FC<CarouselStackProps> = ({ settings, cardStyles }) => {
+  const [order, setOrder] = useState<string[]>(() => cardStyles.map((c) => c.id));
+  const [dragElastic, setDragElastic] = useState(0.7);
 
   useEffect(() => {
     setDragElastic(settings.dragElastic);
-  }, [settings.dragElastic]); // Update when settings change
+  }, [settings.dragElastic]);
+
+  useEffect(() => {
+    setOrder((prev) => {
+      const ids = cardStyles.map((c) => c.id);
+      const kept = prev.filter((id) => ids.includes(id));
+      const added = ids.filter((id) => !kept.includes(id));
+      return [...kept, ...added];
+    });
+  }, [cardStyles]);
 
   const paginate = () => {
-    // Rotate the indices array to move each card to the next position
-    setIndices((prevIndices) => [
-      prevIndices[1],
-      prevIndices[2],
-      prevIndices[3],
-      prevIndices[0],
-    ]);
+    setOrder((prev) => (prev.length > 1 ? [...prev.slice(1), prev[0]] : prev));
   };
 
   const cardVariants = createCardVariants(settings);
 
+  const byId = new Map(cardStyles.map((c) => [c.id, c]));
+  const visible = order.slice(0, Math.min(STACK_POSITIONS, order.length));
+
   return (
     <div className="content-container">
       <AnimatePresence initial={false}>
-        {indices.map((index, i) => (
-          <motion.div
-            key={items[index].id}
-            custom={i}
-            variants={cardVariants}
-            initial="exit"
-            animate="visible"
-            exit="exit"
-            drag={true}
-            dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
-            dragElastic={dragElastic}
-            onDragEnd={(e, { offset, velocity }) => {
-              const swipe = swipePower(offset.x, velocity.x);
-              if (
-                swipe < -settings.swipeConfidenceThreshold ||
-                swipe > settings.swipeConfidenceThreshold
-              ) {
-                paginate();
-              }
-            }}
-            className={`card card-${i}`}
-          >
-            <img src={images?.[index] ?? items[index].image} alt={items[index].title} />
-            <div className="card-content">
-              <h5 className="card-title text-[15px]">{items[index].title}</h5>
-              {/* <p className="card-description">{items[index].description}</p> */}
-            </div>
-          </motion.div>
-        ))}
+        {visible.map((id, i) => {
+          const card = byId.get(id);
+          if (!card) return null;
+          return (
+            <motion.div
+              key={id}
+              custom={i}
+              variants={cardVariants}
+              initial="exit"
+              animate="visible"
+              exit="exit"
+              drag={true}
+              dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
+              dragElastic={dragElastic}
+              onDragEnd={(_e, { offset, velocity }) => {
+                const swipe = swipePower(offset.x, velocity.x);
+                if (
+                  swipe < -settings.swipeConfidenceThreshold ||
+                  swipe > settings.swipeConfidenceThreshold
+                ) {
+                  paginate();
+                }
+              }}
+              className={`card card-${i}`}
+              style={{ background: card.background }}
+            >
+              <img
+                src={card.image}
+                alt=""
+                style={{ transform: `scale(${card.imageScale})` }}
+              />
+              <div className="card-content" />
+            </motion.div>
+          );
+        })}
       </AnimatePresence>
     </div>
   );

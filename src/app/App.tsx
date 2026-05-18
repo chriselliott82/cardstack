@@ -1,7 +1,19 @@
 import { useState } from "react";
 import CarouselStack from "./components/CarouselStack";
-import { SettingsPanel, AnimationSettings } from "./components/SettingsPanel";
+import { SettingsPanel, AnimationSettings, CardStyle } from "./components/SettingsPanel";
 import { items as defaultItems } from "./components/items";
+
+const makeId = () =>
+  (typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2));
+
+const defaultCardStyles: CardStyle[] = defaultItems.map((it) => ({
+  id: makeId(),
+  image: it.image,
+  imageScale: 1,
+  background: "#ffffff",
+}));
 
 export default function App() {
   const [settings, setSettings] = useState<AnimationSettings>({
@@ -14,22 +26,20 @@ export default function App() {
     zIndexDelay: 0.05,
   });
 
-  const [cardImages, setCardImages] = useState<string[]>(
-    defaultItems.map((it) => it.image),
-  );
+  const [cardStyles, setCardStyles] = useState<CardStyle[]>(defaultCardStyles);
 
   return (
     <div className="App">
       <div className="hero-container">
         <div className="container">
-          <CarouselStack settings={settings} images={cardImages} />
+          <CarouselStack settings={settings} cardStyles={cardStyles} />
         </div>
       </div>
       <SettingsPanel
         settings={settings}
         onSettingsChange={setSettings}
-        cardImages={cardImages}
-        onCardImagesChange={setCardImages}
+        cardStyles={cardStyles}
+        onCardStylesChange={setCardStyles}
       />
     </div>
   );

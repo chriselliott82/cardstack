@@ -3,8 +3,15 @@ import { Button } from "./ui/button";
 import { Slider } from "./ui/slider";
 import { Label } from "./ui/label";
 import { Separator } from "./ui/separator";
-import { Settings, X, Upload } from "lucide-react";
+import { Settings, X, Upload, Plus, Trash2 } from "lucide-react";
 import { items as defaultItems } from "./items";
+
+const makeId = () =>
+  (typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2));
+
+const MAX_CARDS = 8;
 
 export interface AnimationSettings {
   springDuration: number;
@@ -16,44 +23,65 @@ export interface AnimationSettings {
   zIndexDelay: number;
 }
 
+export interface CardStyle {
+  id: string;
+  image: string;
+  imageScale: number;
+  background: string;
+}
+
 interface SettingsPanelProps {
   settings: AnimationSettings;
   onSettingsChange: (settings: AnimationSettings) => void;
-  cardImages: string[];
-  onCardImagesChange: (images: string[]) => void;
+  cardStyles: CardStyle[];
+  onCardStylesChange: (styles: CardStyle[]) => void;
 }
+
+const labelStyle: React.CSSProperties = { fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' };
+const valueStyle: React.CSSProperties = { color: 'rgba(0,0,0,0.6)' };
 
 export const SettingsPanel: React.FC<SettingsPanelProps> = ({
   settings,
   onSettingsChange,
-  cardImages,
-  onCardImagesChange,
+  cardStyles,
+  onCardStylesChange,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const fileInputs = useRef<Array<HTMLInputElement | null>>([]);
 
+  const updateSetting = (key: keyof AnimationSettings, value: number) => {
+    onSettingsChange({ ...settings, [key]: value });
+  };
+
+  const updateCard = (index: number, patch: Partial<CardStyle>) => {
+    const next = cardStyles.map((c, i) => (i === index ? { ...c, ...patch } : c));
+    onCardStylesChange(next);
+  };
+
   const handleImageFile = (index: number, file: File) => {
     const reader = new FileReader();
-    reader.onload = () => {
-      const next = [...cardImages];
-      next[index] = reader.result as string;
-      onCardImagesChange(next);
-    };
+    reader.onload = () => updateCard(index, { image: reader.result as string });
     reader.readAsDataURL(file);
   };
 
-  const resetImages = () => {
-    onCardImagesChange(defaultItems.map((it) => it.image));
+  const resetCards = () => {
+    onCardStylesChange(
+      defaultItems.map((it) => ({ id: makeId(), image: it.image, imageScale: 1, background: "#ffffff" })),
+    );
   };
 
-  const updateSetting = (
-    key: keyof AnimationSettings,
-    value: number,
-  ) => {
-    onSettingsChange({
-      ...settings,
-      [key]: value,
-    });
+  const addCard = () => {
+    if (cardStyles.length >= MAX_CARDS) return;
+    const fallback = defaultItems[cardStyles.length % defaultItems.length].image;
+    onCardStylesChange([
+      ...cardStyles,
+      { id: makeId(), image: fallback, imageScale: 1, background: "#ffffff" },
+    ]);
+  };
+
+  const removeCard = (index: number) => {
+    if (cardStyles.length <= 1) return;
+    onCardStylesChange(cardStyles.filter((_, i) => i !== index));
   };
 
   const resetToDefaults = () => {
@@ -94,45 +122,81 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
 
           <div style={{ padding: "16px" }}>
             <div style={{ marginBottom: "20px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Card Images
+              <div className="flex items-center justify-between" style={{ marginBottom: "10px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>
+                  Cards
                 </Label>
                 <button
                   type="button"
-                  onClick={resetImages}
+                  onClick={resetCards}
                   className="text-[11px]"
                   style={{ color: 'rgba(0,0,0,0.5)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
                 >
                   Reset
                 </button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
-                {cardImages.map((src, i) => (
-                  <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                {cardStyles.map((card, i) => (
+                  <div
+                    key={card.id}
+                    style={{
+                      position: 'relative',
+                      border: '1px solid rgba(0,0,0,0.08)',
+                      borderRadius: '10px',
+                      padding: '10px',
+                      display: 'flex',
+                      gap: '10px',
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => removeCard(i)}
+                      disabled={cardStyles.length <= 1}
+                      title="Remove card"
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        background: 'none',
+                        border: 'none',
+                        padding: '4px',
+                        cursor: cardStyles.length <= 1 ? 'not-allowed' : 'pointer',
+                        color: cardStyles.length <= 1 ? 'rgba(0,0,0,0.2)' : 'rgba(0,0,0,0.45)',
+                        borderRadius: '4px',
+                        display: 'inline-flex',
+                      }}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
                     <button
                       type="button"
                       onClick={() => fileInputs.current[i]?.click()}
                       title={`Change image ${i + 1}`}
                       style={{
                         position: 'relative',
-                        width: '100%',
-                        aspectRatio: '1 / 1',
+                        width: '64px',
+                        height: '64px',
+                        flexShrink: 0,
                         borderRadius: '8px',
                         border: '1px solid rgba(0,0,0,0.1)',
                         overflow: 'hidden',
                         padding: 0,
                         cursor: 'pointer',
-                        background: '#f5f5f5',
+                        background: card.background,
                       }}
                     >
                       <img
-                        src={src}
+                        src={card.image}
                         alt={`Card ${i + 1}`}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          display: 'block',
+                          transform: `scale(${card.imageScale})`,
+                        }}
                       />
                       <span
                         style={{
@@ -145,7 +209,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         <Upload className="h-3.5 w-3.5" />
                       </span>
                     </button>
-                    <span className="text-[10px]" style={{ color: 'rgba(0,0,0,0.5)' }}>Card {i + 1}</span>
                     <input
                       ref={(el) => (fileInputs.current[i] = el)}
                       type="file"
@@ -157,30 +220,91 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
                         e.target.value = '';
                       }}
                     />
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ marginBottom: '6px' }}>
+                        <span className="text-[11px]" style={valueStyle}>Card {i + 1}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between" style={{ marginBottom: '4px' }}>
+                        <Label className="text-[11px] font-normal" style={labelStyle}>Image scale</Label>
+                        <span className="text-[11px] font-mono" style={valueStyle}>{card.imageScale.toFixed(2)}x</span>
+                      </div>
+                      <Slider
+                        value={[card.imageScale]}
+                        onValueChange={([v]) => updateCard(i, { imageScale: v })}
+                        min={0.5}
+                        max={2}
+                        step={0.05}
+                        className="w-full"
+                      />
+
+                      <div className="flex items-center justify-between" style={{ marginTop: '8px' }}>
+                        <Label className="text-[11px] font-normal" style={labelStyle}>Background</Label>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                          <span className="text-[11px] font-mono" style={valueStyle}>{card.background}</span>
+                          <label
+                            title="Pick background color"
+                            style={{
+                              position: 'relative',
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '4px',
+                              border: '1px solid rgba(0,0,0,0.2)',
+                              background: card.background,
+                              cursor: 'pointer',
+                              display: 'inline-block',
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <input
+                              type="color"
+                              value={/^#[0-9a-f]{6}$/i.test(card.background) ? card.background : '#ffffff'}
+                              onChange={(e) => updateCard(i, { background: e.target.value })}
+                              style={{
+                                position: 'absolute',
+                                inset: 0,
+                                width: '100%',
+                                height: '100%',
+                                opacity: 0,
+                                cursor: 'pointer',
+                                border: 0,
+                                padding: 0,
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
+
+              <Button
+                onClick={addCard}
+                disabled={cardStyles.length >= MAX_CARDS}
+                variant="outline"
+                size="sm"
+                className="w-full text-xs h-7"
+                style={{ marginTop: '10px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+              >
+                <Plus className="h-3 w-3" />
+                Add card {cardStyles.length >= MAX_CARDS ? `(max ${MAX_CARDS})` : ''}
+              </Button>
             </div>
 
             <Separator style={{ marginBottom: '16px' }} />
 
             <div style={{ marginBottom: "16px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Animation Duration
-                </Label>
-                <span className="text-xs font-mono px-1.5 py-0.5" style={{ color: 'rgba(0,0,0,0.6)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>Animation Duration</Label>
+                <span className="text-xs font-mono px-1.5 py-0.5" style={valueStyle}>
                   {settings.springDuration.toFixed(2)}s
                 </span>
               </div>
               <Slider
                 value={[settings.springDuration]}
-                onValueChange={([value]) =>
-                  updateSetting("springDuration", value)
-                }
+                onValueChange={([value]) => updateSetting("springDuration", value)}
                 min={0.1}
                 max={1.0}
                 step={0.05}
@@ -189,22 +313,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Animation Bounce
-                </Label>
-                <span className="text-xs font-mono px-1.5 py-0.5" style={{ color: 'rgba(0,0,0,0.6)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>Animation Bounce</Label>
+                <span className="text-xs font-mono px-1.5 py-0.5" style={valueStyle}>
                   {settings.springBounce.toFixed(2)}
                 </span>
               </div>
               <Slider
                 value={[settings.springBounce]}
-                onValueChange={([value]) =>
-                  updateSetting("springBounce", value)
-                }
+                onValueChange={([value]) => updateSetting("springBounce", value)}
                 min={0}
                 max={1}
                 step={0.05}
@@ -213,22 +330,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Duration
-                </Label>
-                <span className="text-xs font-mono px-1.5 py-0.5" style={{ color: 'rgba(0,0,0,0.6)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>Duration</Label>
+                <span className="text-xs font-mono px-1.5 py-0.5" style={valueStyle}>
                   {settings.xSpringDuration.toFixed(2)}s
                 </span>
               </div>
               <Slider
                 value={[settings.xSpringDuration]}
-                onValueChange={([value]) =>
-                  updateSetting("xSpringDuration", value)
-                }
+                onValueChange={([value]) => updateSetting("xSpringDuration", value)}
                 min={0.1}
                 max={1.5}
                 step={0.05}
@@ -237,22 +347,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Bounce
-                </Label>
-                <span className="text-xs font-mono px-1.5 py-0.5" style={{ color: 'rgba(0,0,0,0.6)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>Bounce</Label>
+                <span className="text-xs font-mono px-1.5 py-0.5" style={valueStyle}>
                   {settings.xSpringBounce.toFixed(2)}
                 </span>
               </div>
               <Slider
                 value={[settings.xSpringBounce]}
-                onValueChange={([value]) =>
-                  updateSetting("xSpringBounce", value)
-                }
+                onValueChange={([value]) => updateSetting("xSpringBounce", value)}
                 min={0}
                 max={0.5}
                 step={0.01}
@@ -261,22 +364,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Drag Elasticity
-                </Label>
-                <span className="text-xs font-mono px-1.5 py-0.5" style={{ color: 'rgba(0,0,0,0.6)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>Drag Elasticity</Label>
+                <span className="text-xs font-mono px-1.5 py-0.5" style={valueStyle}>
                   {settings.dragElastic.toFixed(2)}
                 </span>
               </div>
               <Slider
                 value={[settings.dragElastic]}
-                onValueChange={([value]) =>
-                  updateSetting("dragElastic", value)
-                }
+                onValueChange={([value]) => updateSetting("dragElastic", value)}
                 min={0.1}
                 max={1.5}
                 step={0.05}
@@ -285,25 +381,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Swipe Sensitivity
-                </Label>
-                <span className="text-xs font-mono px-1.5 py-0.5" style={{ color: 'rgba(0,0,0,0.6)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>Swipe Sensitivity</Label>
+                <span className="text-xs font-mono px-1.5 py-0.5" style={valueStyle}>
                   {settings.swipeConfidenceThreshold.toLocaleString()}
                 </span>
               </div>
               <Slider
                 value={[settings.swipeConfidenceThreshold]}
-                onValueChange={([value]) =>
-                  updateSetting(
-                    "swipeConfidenceThreshold",
-                    value,
-                  )
-                }
+                onValueChange={([value]) => updateSetting("swipeConfidenceThreshold", value)}
                 min={1000}
                 max={20000}
                 step={500}
@@ -312,22 +398,15 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
             </div>
 
             <div style={{ marginBottom: "16px" }}>
-              <div
-                className="flex items-center justify-between"
-                style={{ marginBottom: "8px" }}
-              >
-                <Label className="text-[13px] font-normal" style={{ fontFamily: 'Inter', color: 'rgba(0,0,0,0.6)' }}>
-                  Z-Index Delay
-                </Label>
-                <span className="text-xs font-mono px-1.5 py-0.5" style={{ color: 'rgba(0,0,0,0.6)' }}>
+              <div className="flex items-center justify-between" style={{ marginBottom: "8px" }}>
+                <Label className="text-[13px] font-normal" style={labelStyle}>Z-Index Delay</Label>
+                <span className="text-xs font-mono px-1.5 py-0.5" style={valueStyle}>
                   {settings.zIndexDelay.toFixed(3)}s
                 </span>
               </div>
               <Slider
                 value={[settings.zIndexDelay]}
-                onValueChange={([value]) =>
-                  updateSetting("zIndexDelay", value)
-                }
+                onValueChange={([value]) => updateSetting("zIndexDelay", value)}
                 min={0}
                 max={0.2}
                 step={0.01}
@@ -335,7 +414,6 @@ export const SettingsPanel: React.FC<SettingsPanelProps> = ({
               />
             </div>
 
-            {/* Reset Button */}
             <div className="pt-2 border-t border-border">
               <Button
                 onClick={resetToDefaults}
